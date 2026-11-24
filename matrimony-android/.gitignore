@@ -1,0 +1,11 @@
+.gradle/
+build/
+local.properties
+*.iml
+.idea/
+.kotlin/
+captures/
+# Firebase project config is environment-specific; never commit real keys.
+app/google-services.json
+*.jks
+*.keystore
