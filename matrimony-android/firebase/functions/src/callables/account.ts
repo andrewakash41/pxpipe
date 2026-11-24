@@ -68,6 +68,17 @@ export const unblockUser = onCall(callableOptions, async (req) => {
   return { ok: true };
 });
 
+/** Coarse device-integrity signals from the app; they only feed the risk score. */
+export const reportClientSignals = onCall(callableOptions, async (req) => {
+  const uid = requireUid(req);
+  const { deviceSignals } = parse(z.object({
+    deviceSignals: z.array(z.enum(["ROOT_BINARY", "TEST_KEYS", "DEBUGGER", "EMULATOR", "DEBUGGABLE_BUILD"])).max(5),
+  }), req.data);
+  await rateLimit(uid, "client_signals", 20, DAY);
+  await db.doc(`users/${uid}`).set({ riskSignals: { deviceSignals, deviceSignalsAt: Date.now() } }, { merge: true });
+  return { ok: true };
+});
+
 // ------------------------------------------------------------------------------------ privacy
 
 export const updateConsent = onCall(callableOptions, async (req) => {

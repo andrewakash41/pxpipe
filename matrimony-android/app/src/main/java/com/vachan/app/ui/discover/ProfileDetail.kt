@@ -224,7 +224,10 @@ fun ProfileDetailScreen(id: String, nav: Nav, vm: ProfileDetailViewModel = hiltV
                     Spacer(Modifier.height(6.dp))
                     VerificationBadges(p.verification)
                 }
-                ui.compatibility?.let { CompatibilityRing(it.score, size = 72.dp, stroke = 8.dp) }
+                ui.compatibility?.let {
+                    Spacer(Modifier.size(12.dp))
+                    CompatibilityRing(it.score, size = 72.dp, stroke = 8.dp)
+                }
             }
 
             ui.compatibility?.let { c -> CompatibilitySection(c, ui.insight, ui.insightLoading, aiEnabled) }

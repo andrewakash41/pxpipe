@@ -27,13 +27,21 @@ import java.security.GeneralSecurityException
  * so the file is useless if copied off the device. App data is also excluded from backups
  * (see `data_extraction_rules.xml`).
  */
-class SecureStore(context: Context) {
+class SecureStore(
+    context: Context,
+    /** Test seam: supply an in-memory AEAD where the Android Keystore isn't available (Robolectric). */
+    private val aeadOverride: (() -> Aead)? = null,
+) {
 
     private val appContext = context.applicationContext
 
     val aead: Aead by lazy {
+        aeadOverride?.invoke() ?: keystoreBackedAead()
+    }
+
+    private fun keystoreBackedAead(): Aead {
         AeadConfig.register()
-        AndroidKeysetManager.Builder()
+        return AndroidKeysetManager.Builder()
             .withSharedPref(appContext, KEYSET_NAME, KEYSET_PREFS)
             .withKeyTemplate(KeyTemplates.get("AES256_GCM"))
             .withMasterKeyUri(MASTER_KEY_URI)

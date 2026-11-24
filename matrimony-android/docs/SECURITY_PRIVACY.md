@@ -28,19 +28,19 @@ model and the controls built into the app and the backend.
 
 | Control | Threats | Where |
 |---|---|---|
-| `FLAG_SECURE` on all windows: blocks screenshots, screen recording, and previews in Recents | T4, T7 | `core/security/SecureWindow.kt` |
-| Viewer watermark overlay on every full-size photo (viewer member code + date) | T4 | `ui/components/ProfilePhoto.kt` |
-| Tapjacking protection: touches are filtered when the window is obscured | T6 | `MainActivity` |
+| `FLAG_SECURE` on all windows: blocks screenshots, screen recording, and previews in Recents | T4, T7 | `core/security/DeviceSecurity.kt` (`SecureWindow`) |
+| Viewer watermark overlay on every full-size photo (viewer member code + date) | T4 | `ui/components/Components.kt` (`ProfilePhoto`) |
+| Tapjacking protection: touches are filtered when the window is obscured | T6 | `SecureWindow` |
 | App lock: BiometricPrompt (strong biometric or device credential), auto-lock after a configurable time in background | T7 | `core/security/AppLockManager.kt` |
-| Private notifications: no names or message text on the lock screen | T7 | Notification channel config |
+| Private notifications: no names or message text on the lock screen | T7 | Setting in place; applied when push notifications ship (🗺) |
 | Encrypted local storage: Tink AEAD (AES-256-GCM) with keyset wrapped by an Android Keystore master key | T7, T8 | `core/security/SecureStore.kt` |
 | No cloud/device backups of app data (`allowBackup=false`, data-extraction rules exclude everything) | T7, T8 | Manifest, `xml/data_extraction_rules.xml` |
-| Firestore cache in memory only (no on-disk persistence of others' profiles or chats) | T7 | `FirebaseModule` |
+| Firestore cache in memory only (no on-disk persistence of others' profiles or chats) | T7 | `data/firebase/FirebaseBackend.kt` |
 | Network: cleartext disabled; only system CAs trusted in release | T8 | `xml/network_security_config.xml` |
 | Firebase App Check with Play Integrity: only the genuine app can call the backend | T1, T8 | `VachanApp` |
-| Root / emulator / debugger signals are reported as *risk signals* (they don't lock users out) | T2, T6 | `core/security/DeviceIntegrity.kt` |
+| Root / emulator / debugger signals are reported as *risk signals* (they don't lock users out) | T2, T6 | `DeviceIntegrity` → `reportClientSignals` |
 | R8 minification and obfuscation on release; no secrets in the APK | T8 | `app/build.gradle.kts` |
-| EXIF/GPS metadata stripped by re-encoding before photo upload | T5 | Photo pipeline (server also strips) |
+| EXIF/GPS metadata stripped by re-encoding before photo upload | T5 | 🗺 photo upload pipeline |
 | On-device Safety Copilot scans incoming chat for scam scripts, nothing leaves the phone | T2 | `core/safety/ScamDetector.kt` |
 | Outgoing PII nudge (phone, UPI, address, OTP) | T2, T5 | `core/safety/PiiDetector.kt` |
 
@@ -49,15 +49,15 @@ model and the controls built into the app and the backend.
 | Control | Threats | Where |
 |---|---|---|
 | **Default-deny security rules**; every collection is explicitly allowed | T1, T8 | `firebase/firestore.rules` |
-| **No `list` on profiles**: discovery only through Cloud Functions with per-user rate limits and preference/consent/block filtering. Firebase UIDs are random 28-character IDs, so nothing is sequential | T1 | rules + `functions/src/callables/discovery.ts` |
+| **No `list` on profiles**: discovery only through Cloud Functions with per-user rate limits and preference/consent/block filtering. Firebase UIDs are random 28-character IDs, so nothing is sequential | T1 | rules + `firebase/functions/src/callables/discovery.ts` |
 | Clients can never write trust fields (verification badges, risk scores, plan): public profiles are written only by the server after validation and moderation | T3, T8 | `publishProfile` callable |
-| Interests, matches and contact sharing are server-mediated, with quotas | T1, T2 | `interests.ts` |
+| Interests, matches and contact sharing are server-mediated, with quotas | T1, T2 | `callables/interests.ts` |
 | Messages: only match members can read and write, the sender must be the caller, size limits apply, closed/blocked matches are read-only | T2, T8 | rules |
-| Storage: originals are owner-only; derivatives are served through short-lived URLs after a permission check (photo privacy level, block status) | T4 | `firebase/storage.rules`, `photos.ts` |
-| Server-side fraud heuristics: duplicate-message fan-out, burst rates, new account + money keywords → risk score → step-up verification or human review. Uses no LLM, so chat content never leaves our infrastructure for this | T2 | `functions/src/safety/` |
+| Storage: originals are owner-only; other members get 15-minute signed URLs after a permission check (photo privacy level, block status, match) | T4 | `firebase/storage.rules`, `callables/discovery.ts` |
+| Server-side fraud heuristics: the same text sent to many conversations (detected from a one-way hash of normalised text, kept 24 h — never the text), reports, risky interest notes, device signals → risk score → step-up verification or human review. No LLM is involved | T2 | `firebase/functions/src/safety/`, `triggers/` |
 | Secrets (AI keys) in Secret Manager; never in code or the client | T8 | `defineSecret` |
 | Admin access only through audited service accounts; staff tooling shows redacted data by default and logs every access | T9 | 🗺 admin console |
-| Account deletion: 30-day grace (undo), then hard delete across Firestore and Storage; legally required IP log kept 1 year in a restricted collection | DPDP | `privacy.ts` |
+| Account deletion: 30-day grace (undo), then hard delete across Firestore, Storage and Auth; legally required IP log kept 1 year in a restricted collection | DPDP | `callables/account.ts`, `triggers/index.ts` |
 
 ### 2.3 AI gateway
 
@@ -86,9 +86,9 @@ E2EE would stop us (and attackers who breach us) from reading chats. It also pre
 *server-side* scam detection on message content. Our approach:
 
 - **MVP:** messages are encrypted in transit (TLS) and at rest (Google-managed keys) and
-  access-controlled to the two members. Scam detection happens **on the device**. The server
-  only sees metadata patterns (fan-out, rates) plus messages a user explicitly includes in a
-  report.
+  access-controlled to the two members. Scam detection on content happens **on the device**.
+  Server-side, only patterns are used — a one-way hash to spot the same text sent to many
+  people — plus messages a user explicitly attaches to a report.
 - **Phase 2:** move to E2EE (X25519 + AES-GCM via Tink hybrid encryption, per-device keys,
   safety-number verification). The on-device Safety Copilot keeps working unchanged; reports
   attach the decrypted messages the reporter chooses. The `MessageCipher` seam in the data

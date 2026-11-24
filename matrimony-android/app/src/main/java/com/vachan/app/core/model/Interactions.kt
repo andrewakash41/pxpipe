@@ -144,7 +144,8 @@ data class FamilyManager(
     val name: String,
     val relation: String,
     val permissions: Set<FamilyPermission>,
-    val inviteCode: String,
+    /** Present until the invite is accepted; the server deletes it on acceptance. */
+    val inviteCode: String = "",
     val accepted: Boolean = false,
 )
 

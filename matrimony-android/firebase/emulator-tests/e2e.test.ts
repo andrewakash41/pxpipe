@@ -120,6 +120,11 @@ describe("Vachan backend end-to-end", () => {
     expect(parsed.filters).toHaveProperty("verifiedOnly");
   });
 
+  it("accepts only known device-integrity signals", async () => {
+    expect(await errorCode(alice.call("reportClientSignals", { deviceSignals: ["EMULATOR"] }))).toBe("ok");
+    expect(await errorCode(alice.call("reportClientSignals", { deviceSignals: ["HACKED_BY_ME"] }))).toBe("functions/invalid-argument");
+  });
+
   it("blocking hides people and closes the conversation", async () => {
     await bob.call("blockUser", { userId: aliceId });
     expect(await errorCode(alice.call("getProfileCard", { id: bobId }))).toBe("functions/not-found");

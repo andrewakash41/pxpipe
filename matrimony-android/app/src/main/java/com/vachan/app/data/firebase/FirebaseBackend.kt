@@ -32,6 +32,7 @@ import com.vachan.app.core.model.Profile
 import com.vachan.app.core.model.Report
 import com.vachan.app.core.model.ReportReason
 import com.vachan.app.core.model.SearchFilters
+import com.vachan.app.core.security.DeviceIntegrity
 import com.vachan.app.data.AssistantTurn
 import com.vachan.app.data.Backend
 import com.vachan.app.data.Session
@@ -46,6 +47,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -77,6 +80,7 @@ class FirebaseBackend(
     private val settingsRepository: SettingsRepository,
 ) : Backend {
 
+    private val appContext = context.applicationContext
     private val auth = FirebaseAuth.getInstance()
     private val db = FirebaseFirestore.getInstance().apply {
         // Memory-only cache: other people's profiles and chats are never written to disk.
@@ -482,6 +486,25 @@ class FirebaseBackend(
         auth.addAuthStateListener { fa ->
             _session.value = fa.currentUser?.let { Session(it.uid, mask(it.phoneNumber)) }
             restartListeners()
+        }
+        // The server enforces who may contact this member, so keep it in sync with local settings.
+        scope.launch {
+            combine(
+                _session,
+                settingsRepository.settings.map { Triple(it.verifiedOnlyContact, it.requirePhotoToContact, it.incognito) }.distinctUntilChanged(),
+            ) { s, prefs -> s to prefs }.collect { (s, prefs) ->
+                if (s != null) {
+                    runCatching {
+                        call("updatePrivacySettings", mapOf("verifiedOnlyContact" to prefs.first, "requirePhotoToContact" to prefs.second, "incognito" to prefs.third))
+                    }
+                }
+            }
+        }
+        // Coarse device-integrity signals feed the account risk score (never a lock-out on their own).
+        scope.launch {
+            _session.filterNotNull().map { it.userId }.distinctUntilChanged().collect {
+                runCatching { call("reportClientSignals", mapOf("deviceSignals" to JSONArray(DeviceIntegrity.signals(appContext).map { s -> s.name }))) }
+            }
         }
     }
 }

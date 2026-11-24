@@ -4,31 +4,71 @@
       "collectionGroup": "profiles",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "gender", "order": "ASCENDING" },
-        { "fieldPath": "visibility", "order": "ASCENDING" },
-        { "fieldPath": "age", "order": "ASCENDING" }
+        {
+          "fieldPath": "gender",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "visibility",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "age",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "interests",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "status", "order": "ASCENDING" },
-        { "fieldPath": "expiresAt", "order": "ASCENDING" }
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "expiresAt",
+          "order": "ASCENDING"
+        }
       ]
-    },
-    {
-      "collectionGroup": "familyActivity",
-      "queryScope": "COLLECTION",
-      "fields": [{ "fieldPath": "at", "order": "DESCENDING" }]
     }
   ],
   "fieldOverrides": [
-    { "collectionGroup": "fanout", "fieldPath": "expireAt", "ttl": true, "indexes": [] },
-    { "collectionGroup": "rateLimits", "fieldPath": "expireAt", "ttl": true, "indexes": [] },
-    { "collectionGroup": "aiUsage", "fieldPath": "expireAt", "ttl": true, "indexes": [] },
-    { "collectionGroup": "views", "fieldPath": "expireAt", "ttl": true, "indexes": [] },
-    { "collectionGroup": "passed", "fieldPath": "expireAt", "ttl": true, "indexes": [] },
-    { "collectionGroup": "ipLog", "fieldPath": "expireAt", "ttl": true, "indexes": [] }
+    {
+      "collectionGroup": "fanout",
+      "fieldPath": "expireAt",
+      "ttl": true,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "rateLimits",
+      "fieldPath": "expireAt",
+      "ttl": true,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "aiUsage",
+      "fieldPath": "expireAt",
+      "ttl": true,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "views",
+      "fieldPath": "expireAt",
+      "ttl": true,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "passed",
+      "fieldPath": "expireAt",
+      "ttl": true,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "ipLog",
+      "fieldPath": "expireAt",
+      "ttl": true,
+      "indexes": []
+    }
   ]
 }

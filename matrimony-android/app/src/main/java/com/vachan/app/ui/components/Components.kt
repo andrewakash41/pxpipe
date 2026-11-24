@@ -154,14 +154,19 @@ fun CompatibilityRing(score: Int, modifier: Modifier = Modifier, size: Dp = 56.d
     }
     Box(modifier.size(size).semantics { contentDescription = "$score percent compatible" }, contentAlignment = Alignment.Center) {
         Canvas(Modifier.fillMaxSize()) {
-            val s = Stroke(width = stroke.toPx(), cap = StrokeCap.Round)
-            drawArc(track, startAngle = -90f, sweepAngle = 360f, useCenter = false, style = s)
-            drawArc(color, startAngle = -90f, sweepAngle = 360f * progress, useCenter = false, style = s)
+            val w = stroke.toPx()
+            val s = Stroke(width = w, cap = StrokeCap.Round)
+            // Inset by half the stroke so the ring stays inside its bounds.
+            val inset = Offset(w / 2, w / 2)
+            val arcSize = androidx.compose.ui.geometry.Size(this.size.width - w, this.size.height - w)
+            drawArc(track, startAngle = -90f, sweepAngle = 360f, useCenter = false, topLeft = inset, size = arcSize, style = s)
+            drawArc(color, startAngle = -90f, sweepAngle = 360f * progress, useCenter = false, topLeft = inset, size = arcSize, style = s)
         }
         Text("$score", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun VerificationBadges(v: Verification, modifier: Modifier = Modifier, compact: Boolean = false) {
     val items = buildList {
@@ -170,11 +175,16 @@ fun VerificationBadges(v: Verification, modifier: Modifier = Modifier, compact: 
         if (v.workEmail) add(Icons.Filled.Work to "Work verified")
         if (v.phone && !compact) add(Icons.Filled.PhoneAndroid to "Phone verified")
     }
-    Row(modifier, horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-        items.forEach { (icon, label) ->
-            if (compact) {
+    if (compact) {
+        Row(modifier, horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+            items.forEach { (icon, label) ->
                 Icon(icon, contentDescription = label, tint = VachanColors.extended.verified, modifier = Modifier.size(18.dp))
-            } else {
+            }
+        }
+    } else {
+        // Wraps onto a second line on narrow screens instead of overflowing.
+        FlowRow(modifier, horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            items.forEach { (icon, label) ->
                 Pill(text = label, icon = icon, container = VachanColors.extended.verified.copy(alpha = 0.12f), content = VachanColors.extended.verified)
             }
         }

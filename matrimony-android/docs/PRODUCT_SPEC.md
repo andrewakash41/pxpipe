@@ -44,8 +44,8 @@ marriers (29+).
 5. **Connect** → mutual interest unlocks chat (free) with Safety Copilot, icebreakers and
    translation → share phone number only via explicit, revocable consent → "Meet safely" plan
    with a trusted-contact check-in.
-6. **Close the loop** → interests expire after 7 days with a kind, AI-drafted decline so
-   nobody is ghosted → hide or delete the profile when engaged.
+6. **Close the loop** → unanswered interests expire after 7 days (the sender is told), and
+   declining takes one tap with a kind, AI-drafted note → hide or delete the profile when engaged.
 
 ## 3. Feature list
 
@@ -62,7 +62,7 @@ marriers (29+).
 | Profile consistency check (age vs education timeline, profession vs income band) → *flags for human review*, never auto-ban | Catch fabricated personas | ✅ backend heuristics, AI assist optional |
 | "Verified-only" mode: only verified members can see or contact me | Women's safety gap | ✅ |
 | Trust badges (not a numeric score) | Explainable trust | ✅ |
-| Response-rate badge ("usually replies within 2 days") | Ghosting | ✅ |
+| Response-rate badge ("usually replies") | Ghosting | ✅ UI (Demo data); 🗺 nightly server computation |
 
 ### 3.2 AI-assisted matchmaking and recommendations
 
@@ -95,7 +95,7 @@ own; the LLM explains, drafts and parses — it never decides who is shown.** Se
 | One-tap report & block, with categories; blocking hides both people from each other everywhere | Advisory: encourage fraud reporting | ✅ |
 | Server-side pattern detection (no LLM): same text sent to many users, burst messaging, new account + money keywords → account risk score → step-up verification or human review | Organised fraud rings | ✅ |
 | **Meet safely** | Plan a first meeting in a public place, share time/place with a trusted contact, check-in timer, SOS shortcut (112) | ✅ |
-| Women-first controls | Verified-only contact, photo blur until accepted, no contact from people without photos, message requests filter | ✅ |
+| Women-first controls | Verified-only contact, photo blur until accepted, no contact from people without photos (enforced server-side) | ✅ |
 | Grievance officer + 24 h acknowledge / 15-day resolution SLA tracking | IT Rules 2021 | ✅ (info + report status) |
 
 ### 3.4 Privacy
@@ -106,11 +106,13 @@ own; the LLM explains, drafts and parses — it never decides who is shown.** Se
 | Exact DOB, full name, exact location and phone are never shown: profiles show age, first name + initial, city | ✅ |
 | **Photo privacy levels:** visible to all members / verified members / only after I accept interest. Blurred previews otherwise | ✅ |
 | **Viewer watermark:** every full photo is rendered with the viewer's member code, a deterrent against leaks and misuse | ✅ (client overlay; server-side burn-in 🗺) |
+| Photo upload pipeline: client upload, EXIF/GPS stripping, AI-image forensics, derivatives | 🔌 storage rules + signed-URL serving ✅; client upload and processing 🗺 |
 | **Screenshot and screen-recording blocking** (`FLAG_SECURE`) across the app | ✅ |
 | Phone number is never exposed: share it only through a consent button, and revoke it at any time | ✅ |
-| App lock (biometric / device credential) with auto-lock timeout; private notifications (no names or message text on the lock screen); built for shared family phones | ✅ |
+| App lock (biometric / device credential) with auto-lock timeout, built for shared family phones | ✅ |
+| Private notifications (no names or message text on the lock screen) | ✅ setting; 🗺 push notifications (FCM) |
 | Encrypted on-device storage (Tink AEAD with Android Keystore key); no backups of app data; chat cache in memory only | ✅ |
-| Incognito: browse without appearing in "who viewed me"; hide profile for up to 90 days | ✅ |
+| Incognito: browse without appearing in "who viewed me"; hide profile any time | ✅ |
 | **Consent dashboard (DPDP):** per-purpose toggles with history; AI processing can be turned off entirely | ✅ |
 | Download my data (JSON export) and delete my account (30-day grace, then hard delete; legally required IP log kept 1 year, separately and access-restricted) | ✅ |
 | Profiles can't be scraped: no list queries on profiles, server-mediated discovery with rate limits, random non-sequential IDs (lesson from the "Dil Ka Rishta" API leak) | ✅ |
@@ -123,13 +125,15 @@ Parents or siblings can be **invited** as co-managers with scoped permissions: *
 *shortlist*, *suggest a profile*, *edit profile sections*. They can never chat as the member,
 see the member's chats, or accept an interest on the member's behalf. The member can remove a
 co-manager at any time, and every co-manager action is shown in an activity log. This bridges
-"77% self-managed" with "7 in 10 value parental guidance". **✅ UI + data model; 🔌 invite
-delivery.**
+"77% self-managed" with "7 in 10 value parental guidance". **✅ member-side UI, invite codes,
+permissions and activity log (server: invite / accept / update / remove); 🗺 the co-manager's own app
+screens.**
 
 ### 3.6 Inclusion and reach
 
-- UI in English and Hindi (✅), with Tamil, Telugu, Marathi, Bengali, Kannada, Malayalam,
-  Gujarati and Punjabi next (🗺). AI bio writing and translation work in all of them (✅ via
+- UI in English (✅). Hindi, Tamil, Telugu, Marathi, Bengali, Kannada, Malayalam, Gujarati and
+  Punjabi next (🗺 — screen strings still need extracting into resources; the locale config and
+  Hindi app name are in place). AI bio writing and translation already work in all of them (✅ via
   provider).
 - Remarriage-friendly: divorced/widowed/awaiting-divorce statuses with respectful copy;
   "has children" and "open to partner with children" fields (✅).

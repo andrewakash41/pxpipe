@@ -13,7 +13,7 @@ export {
 } from "./callables/ai.js";
 export {
   acceptFamilyInvite, blockUser, cancelAccountDeletion, confirmWorkEmail, exportMyData, inviteFamilyManager,
-  removeFamilyManager, reportUser, requestAccountDeletion, sendWorkEmailCode, startGovIdVerification,
+  removeFamilyManager, reportClientSignals, reportUser, requestAccountDeletion, sendWorkEmailCode, startGovIdVerification,
   submitSelfieCheck, unblockUser, updateConsent, updateFamilyManager,
 } from "./callables/account.js";
 export { expireInterests, onMessageCreated, purgeDeletedAccounts } from "./triggers/index.js";

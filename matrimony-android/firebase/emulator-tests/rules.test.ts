@@ -94,6 +94,12 @@ describe("matches and messages", () => {
     await assertFails(getDoc(doc(as("carol"), "matches/alice_bob")));
   });
 
+  it("members can list their own matches (the app's array-contains query) but not others'", async () => {
+    await assertSucceeds(getDocs(query(collection(as("alice"), "matches"), where("members", "array-contains", "alice"))));
+    await assertFails(getDocs(query(collection(as("alice"), "matches"), where("members", "array-contains", "bob"))));
+    await assertFails(getDocs(collection(as("alice"), "matches")));
+  });
+
   it("members can move only their own read marker", async () => {
     await assertSucceeds(updateDoc(doc(as("alice"), "matches/alice_bob"), { "lastReadAt.alice": Date.now() }));
     await assertFails(updateDoc(doc(as("alice"), "matches/alice_bob"), { "lastReadAt.bob": Date.now() }));
@@ -133,6 +139,8 @@ describe("reports", () => {
     await assertSucceeds(getDoc(doc(as("alice"), "reports/r1")));
     await assertFails(getDoc(doc(as("mallory"), "reports/r1")));
     await assertFails(setDoc(doc(as("alice"), "reports/r2"), { reporterId: "alice", reportedId: "x" }));
+    await assertSucceeds(getDocs(query(collection(as("alice"), "reports"), where("reporterId", "==", "alice"))));
+    await assertFails(getDocs(collection(as("alice"), "reports")));
   });
 });
 

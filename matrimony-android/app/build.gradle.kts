@@ -55,6 +55,7 @@ android {
 
     testOptions {
         unitTests.isReturnDefaultValues = true
+        unitTests.isIncludeAndroidResources = true
     }
 }
 
@@ -98,4 +99,17 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.turbine)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.test.core)
+    testImplementation(platform(libs.compose.bom))
+    testImplementation(libs.compose.ui.test.junit4)
+    debugImplementation(libs.compose.ui.test.manifest)
+}
+
+// Screenshots are rendered with Robolectric's native graphics; run with -Pscreenshots to write PNGs.
+tasks.withType<Test>().configureEach {
+    // Robolectric reaches into java.io.FileDescriptor (via jdk.internal.access) on modern JDKs.
+    jvmArgs("--add-opens=java.base/java.io=ALL-UNNAMED", "--add-exports=java.base/jdk.internal.access=ALL-UNNAMED")
+    systemProperty("vachan.screenshots.dir", layout.buildDirectory.dir("screenshots").get().asFile.absolutePath)
+    systemProperty("vachan.screenshots.enabled", (project.findProperty("screenshots") != null).toString())
 }

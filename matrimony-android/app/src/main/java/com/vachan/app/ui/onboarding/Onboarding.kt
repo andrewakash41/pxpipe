@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
@@ -137,7 +138,12 @@ private fun WelcomeScreen(demoMode: Boolean, onStart: () -> Unit) {
                 color = Color.White.copy(alpha = 0.85f), style = MaterialTheme.typography.bodyMedium,
             )
             Spacer(Modifier.height(8.dp))
-            Button(onClick = onStart, modifier = Modifier.fillMaxWidth().height(54.dp)) { Text("Get started") }
+            Button(
+                onClick = onStart,
+                modifier = Modifier.fillMaxWidth().height(54.dp),
+                // Marigold on kumkum: the primary action must stand out from the brand background.
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFC46B), contentColor = Color(0xFF3F0014)),
+            ) { Text("Get started") }
             if (demoMode) {
                 Text(
                     "Demo mode: runs fully on this phone with fictional profiles. Use any Indian mobile number; the code is 123456.",
