@@ -1,0 +1,19 @@
+{
+  "name": "vachan-emulator-tests",
+  "private": true,
+  "type": "module",
+  "description": "Security-rules and end-to-end tests against the local Firebase emulators",
+  "scripts": {
+    "test": "npm run test:rules && npm run test:e2e",
+    "test:rules": "NODE_OPTIONS=\"$NODE_OPTIONS --require $PWD/scripts/loopback-direct.cjs\" firebase emulators:exec --project demo-vachan --only firestore,storage --config ../firebase.json \"vitest run rules.test.ts\"",
+    "pretest:e2e": "npm --prefix ../functions run build && node -e \"require('fs').writeFileSync('../functions/.secret.local','AI_API_KEY=unused-in-emulator\\n')\"",
+    "test:e2e": "NODE_OPTIONS=\"$NODE_OPTIONS --require $PWD/scripts/loopback-direct.cjs\" firebase emulators:exec --project demo-vachan --only auth,functions,firestore,storage --config ../firebase.json \"vitest run e2e.test.ts\""
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "6.0.0",
+    "firebase": "13.2.0",
+    "firebase-tools": "15.35.0",
+    "vite": "8.1.7",
+    "vitest": "5.1.0"
+  }
+}

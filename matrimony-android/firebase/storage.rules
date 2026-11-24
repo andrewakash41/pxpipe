@@ -1,0 +1,21 @@
+rules_version = '2';
+
+// Photos: members upload only into their own folder, only images, only modest sizes.
+// Nobody else reads the bucket directly; the server hands out 15-minute signed URLs after
+// checking photo privacy (all / verified / after accept) and blocks.
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+
+    match /photos/{uid}/{photoId} {
+      allow read, delete: if request.auth != null && request.auth.uid == uid;
+      allow create, update: if request.auth != null
+        && request.auth.uid == uid
+        && photoId.matches('^[A-Za-z0-9_-]{1,64}[.]jpg$')
+        && request.resource.size < 8 * 1024 * 1024
+        && request.resource.contentType.matches('image/(jpeg|png|webp)');
+    }
+  }
+}

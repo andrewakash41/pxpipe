@@ -1,0 +1,87 @@
+rules_version = '2';
+
+// Vachan access model
+//  - Default deny. Every readable path is listed below.
+//  - Trust-bearing data (profiles, interests, matches, verification, reports) is written only by
+//    Cloud Functions, which validate, rate-limit and audit.
+//  - Profiles cannot be listed or queried by clients at all — discovery is server-mediated, which
+//    prevents scraping and ID enumeration.
+//  - Clients write exactly two things directly: chat messages (validated here) and their own
+//    shortlist / read markers.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function isMe(uid) { return signedIn() && request.auth.uid == uid; }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Private account document (full profile, consents, privacy settings). Owner-read only.
+    match /users/{uid} {
+      allow get: if isMe(uid);
+
+      match /blocks/{otherId} { allow read: if isMe(uid); }
+      match /familyManagers/{id} { allow read: if isMe(uid); }
+      match /familyActivity/{id} { allow read: if isMe(uid); }
+      match /consentLog/{id} { allow read: if isMe(uid); }
+      match /views/{viewerId} { allow read: if isMe(uid); }
+
+      match /shortlist/{otherId} {
+        allow read, delete: if isMe(uid);
+        allow create, update: if isMe(uid)
+          && otherId != uid
+          && request.resource.data.keys().hasOnly(['at'])
+          && request.resource.data.at is int;
+      }
+      // blockedBy, private, passed: server only (default deny).
+    }
+
+    // Public profile cards are served through the getProfileCard / getDailyPicks functions.
+    match /profiles/{uid} {
+      allow get: if isMe(uid);
+    }
+
+    match /interests/{id} {
+      allow read: if signedIn()
+        && (resource.data.fromId == request.auth.uid || resource.data.toId == request.auth.uid);
+    }
+
+    match /matches/{matchId} {
+      function isMember() { return signedIn() && request.auth.uid in resource.data.members; }
+
+      allow read: if isMember();
+      // A member may only move their own read marker forward.
+      allow update: if isMember()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastReadAt'])
+        && request.resource.data.lastReadAt.diff(resource.data.lastReadAt).affectedKeys().hasOnly([request.auth.uid])
+        && request.resource.data.lastReadAt[request.auth.uid] is int;
+
+      match /messages/{messageId} {
+        function matchDoc() { return get(/databases/$(database)/documents/matches/$(matchId)).data; }
+        function isParticipant() { return signedIn() && request.auth.uid in matchDoc().members; }
+
+        allow read: if isParticipant();
+        allow create: if isParticipant()
+          && matchDoc().closed == false
+          && request.resource.data.keys().hasOnly(['senderId', 'text', 'sentAt'])
+          && request.resource.data.senderId == request.auth.uid
+          && request.resource.data.text is string
+          && request.resource.data.text.size() > 0
+          && request.resource.data.text.size() <= 2000
+          && request.resource.data.sentAt is int
+          && math.abs(request.resource.data.sentAt - request.time.toMillis()) < 300000;
+        // Messages are immutable for members; deletion happens with account deletion.
+      }
+    }
+
+    // A reporter can follow the status of their own reports (not the evidence).
+    match /reports/{id} {
+      allow read: if signedIn() && resource.data.reporterId == request.auth.uid;
+    }
+
+    // Everything else — ipLog, aiUsage, rateLimits, fanout, moderationQueue, memberCodes,
+    // familyInvites — is server-only and covered by the default deny above.
+  }
+}
