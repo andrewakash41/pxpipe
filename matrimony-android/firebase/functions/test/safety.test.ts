@@ -70,6 +70,23 @@ describe("profile input validation", () => {
     expect(ProfileInput.safeParse({ ...valid, preferences: { ...valid.preferences, minAge: 40, maxAge: 30 } }).success).toBe(false);
   });
 
+  it("drops client-supplied photo URLs so profiles can't point viewers at external trackers", () => {
+    const r = ProfileInput.parse({ ...valid, photos: [{ id: "ph_1", seed: 2, url: "https://tracker.example/pixel.jpg" }] });
+    expect(r.photos).toEqual([{ id: "ph_1", seed: 2 }]);
+    expect(ProfileInput.safeParse({ ...valid, photos: [{ id: "../../etc/passwd" }] }).success).toBe(false);
+    expect(ProfileInput.safeParse({ ...valid, photos: Array.from({ length: 7 }, (_, i) => ({ id: `p${i}` })) }).success).toBe(false);
+  });
+
+  it("rejects under-age members at the schema floor and trims names", () => {
+    expect(ProfileInput.safeParse({ ...valid, age: 16 }).success).toBe(false);
+    expect(ProfileInput.parse({ ...valid, firstName: "  Ananya  " }).firstName).toBe("Ananya");
+  });
+
+  it("public card never persists a signed photo URL", () => {
+    const card = publicCard(woman({ photos: [{ id: "a", seed: 1, url: "https://signed.example" }] }));
+    expect(card.photos).toEqual([{ id: "a", seed: 1 }]);
+  });
+
   it("public card hides community and income unless the member opts in", () => {
     const card = publicCard(woman({ community: "Example", showCommunity: false, incomeBand: "L20_35", showIncome: false }));
     expect(card.community).toBeNull();

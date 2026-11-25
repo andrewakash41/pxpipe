@@ -148,4 +148,19 @@ describe("Vachan backend end-to-end", () => {
     await alice.call("cancelAccountDeletion");
     expect((await getDoc(doc(alice.db, `profiles/${aliceId}`))).get("visibility")).toBe("EVERYONE");
   });
+
+  it("restores the member's own visibility choice when deletion is cancelled", async () => {
+    await alice.call("publishProfile", { profile: profile({ firstName: "Alice", visibility: "VERIFIED_ONLY" }) });
+    await alice.call("requestAccountDeletion");
+    expect((await getDoc(doc(alice.db, `profiles/${aliceId}`))).get("visibility")).toBe("HIDDEN");
+    await alice.call("cancelAccountDeletion");
+    expect((await getDoc(doc(alice.db, `profiles/${aliceId}`))).get("visibility")).toBe("VERIFIED_ONLY");
+  });
+
+  it("never stores a client-supplied photo URL", async () => {
+    const { profile: p } = await alice.call<{ profile: { photos: Record<string, unknown>[] } }>("publishProfile", {
+      profile: profile({ firstName: "Alice", photos: [{ id: "ph1", url: "https://tracker.example/p.gif", seed: 1 }] }),
+    });
+    expect(p.photos).toEqual([{ id: "ph1", seed: 1 }]);
+  });
 });

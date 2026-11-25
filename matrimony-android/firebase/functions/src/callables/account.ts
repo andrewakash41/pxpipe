@@ -6,7 +6,7 @@ import { logger } from "firebase-functions";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { z } from "zod";
 import { app, callableOptions, db, FieldValue, isEmulator, pairId, parse, rateLimit, requireUid } from "../lib/firebase.js";
-import { ConsentPurpose, FamilyPermission, type Profile, ReportReason } from "../lib/model.js";
+import { ConsentPurpose, FamilyPermission, type Profile, ProfileVisibility, ReportReason } from "../lib/model.js";
 
 const DAY = 86_400_000;
 const UserId = z.object({ userId: z.string().min(1).max(128) });
@@ -128,15 +128,28 @@ export const exportMyData = onCall(callableOptions, async (req) => {
   return { json: JSON.stringify(out, null, 2) };
 });
 
+/**
+ * Hides the profile while deletion is pending, remembering the member's own visibility choice so
+ * that cancelling restores it (a "Verified members only" member must not become visible to all).
+ */
 async function setHidden(uid: string, hidden: boolean) {
   const userRef = db.doc(`users/${uid}`);
-  const profile = (await userRef.get()).get("profile") as Profile | undefined;
+  const snap = await userRef.get();
+  const profile = snap.get("profile") as Profile | undefined;
   if (!profile) return;
-  const visibility = hidden ? "HIDDEN" : "EVERYONE";
-  await Promise.all([
-    userRef.update({ "profile.visibility": visibility }),
-    db.doc(`profiles/${uid}`).update({ visibility }),
-  ]);
+  if (hidden) {
+    const previous = profile.visibility === "HIDDEN" ? (snap.get("visibilityBeforeDeletion") as string | undefined) ?? "HIDDEN" : profile.visibility;
+    await Promise.all([
+      userRef.update({ "profile.visibility": "HIDDEN", visibilityBeforeDeletion: previous }),
+      db.doc(`profiles/${uid}`).update({ visibility: "HIDDEN" }),
+    ]);
+  } else {
+    const restored = ProfileVisibility.catch("EVERYONE").parse(snap.get("visibilityBeforeDeletion") ?? "EVERYONE");
+    await Promise.all([
+      userRef.update({ "profile.visibility": restored, visibilityBeforeDeletion: FieldValue.delete() }),
+      db.doc(`profiles/${uid}`).update({ visibility: restored }),
+    ]);
+  }
 }
 
 export const requestAccountDeletion = onCall(callableOptions, async (req) => {

@@ -1,5 +1,5 @@
 node_modules/
-lib/
+/lib/
 # The repo-level .gitignore ignores npm lockfiles; this package deploys with npm, so keep its lockfile.
 !package-lock.json
 .secret.local
