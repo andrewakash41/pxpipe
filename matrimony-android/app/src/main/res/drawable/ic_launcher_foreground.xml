@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Aangan mark: a home seen from above, with an arched doorway into the courtyard. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <path android:strokeColor="#1C1917" android:strokeWidth="4.6" android:fillColor="#00000000"
+        android:pathData="M45.3,31.4h17.4a13.9,13.9 0,0 1,13.9 13.9v17.4a13.9,13.9 0,0 1,-13.9 13.9h-17.4a13.9,13.9 0,0 1,-13.9 -13.9v-17.4a13.9,13.9 0,0 1,13.9 -13.9z" />
+    <path android:fillColor="#B0532F"
+        android:pathData="M45.8,78.9V58.9a8.2,8.2 0,0 1,16.4 0V78.9z" />
+</vector>

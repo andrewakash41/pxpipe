@@ -157,10 +157,11 @@ describe("Vachan backend end-to-end", () => {
     expect((await getDoc(doc(alice.db, `profiles/${aliceId}`))).get("visibility")).toBe("VERIFIED_ONLY");
   });
 
-  it("never stores a client-supplied photo URL", async () => {
+  it("keeps only photos that were really uploaded, and never a client-supplied URL", async () => {
     const { profile: p } = await alice.call<{ profile: { photos: Record<string, unknown>[] } }>("publishProfile", {
       profile: profile({ firstName: "Alice", photos: [{ id: "ph1", url: "https://tracker.example/p.gif", seed: 1 }] }),
     });
-    expect(p.photos).toEqual([{ id: "ph1", seed: 1 }]);
+    // ph1 was never uploaded to Storage, so it doesn't count as a photo (or leak a URL).
+    expect(p.photos).toEqual([]);
   });
 });

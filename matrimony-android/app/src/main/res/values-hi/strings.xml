@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">वचन</string>
+    <string name="app_name">आँगन</string>
+    <string name="checkin_channel_name">सुरक्षा चेक-इन</string>
+    <string name="checkin_channel_description">पहली मुलाक़ात के दौरान चेक-इन की याद</string>
 </resources>

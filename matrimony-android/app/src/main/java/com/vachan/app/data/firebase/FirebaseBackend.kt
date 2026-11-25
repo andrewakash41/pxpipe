@@ -3,6 +3,9 @@ package com.vachan.app.data.firebase
 import android.app.Activity
 import android.content.Context
 import com.google.firebase.FirebaseException
+import com.google.firebase.FirebaseNetworkException
+import com.google.firebase.FirebaseTooManyRequestsException
+import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.PhoneAuthCredential
 import com.google.firebase.auth.PhoneAuthOptions
@@ -13,6 +16,9 @@ import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.MemoryCacheSettings
 import com.google.firebase.firestore.Query
 import com.google.firebase.functions.FirebaseFunctions
+import com.google.firebase.functions.FirebaseFunctionsException
+import com.google.firebase.storage.FirebaseStorage
+import com.google.firebase.storage.StorageMetadata
 import com.vachan.app.BuildConfig
 import com.vachan.app.core.matching.CompatibilityEngine
 import com.vachan.app.core.matching.CompatibilityResult
@@ -28,10 +34,13 @@ import com.vachan.app.core.model.FamilyPermission
 import com.vachan.app.core.model.Interest
 import com.vachan.app.core.model.MatchInsight
 import com.vachan.app.core.model.Message
+import com.vachan.app.core.model.Photo
 import com.vachan.app.core.model.Profile
 import com.vachan.app.core.model.Report
 import com.vachan.app.core.model.ReportReason
 import com.vachan.app.core.model.SearchFilters
+import com.vachan.app.core.photos.PhotoStore
+import com.vachan.app.core.safety.PhoneNumbers
 import com.vachan.app.core.security.DeviceIntegrity
 import com.vachan.app.data.AssistantTurn
 import com.vachan.app.data.Backend
@@ -58,6 +67,7 @@ import kotlinx.serialization.json.Json
 import org.json.JSONArray
 import org.json.JSONObject
 import java.lang.ref.WeakReference
+import java.util.UUID
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
 
@@ -78,6 +88,7 @@ class FirebaseBackend(
     context: Context,
     private val scope: CoroutineScope,
     private val settingsRepository: SettingsRepository,
+    private val photoStore: PhotoStore,
 ) : Backend {
 
     private val appContext = context.applicationContext
@@ -91,6 +102,7 @@ class FirebaseBackend(
     private val functions = FirebaseFunctions.getInstance(BuildConfig.FUNCTIONS_REGION)
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true; explicitNulls = false; allowStructuredMapKeys = true }
     private val learner = PreferenceLearner()
+    /** Other members' cards, in memory only (never written to disk). */
     private val profileCache = mutableMapOf<String, Profile>()
 
     private val uid: String? get() = auth.currentUser?.uid
@@ -114,20 +126,40 @@ class FirebaseBackend(
     }
 
     private suspend fun <T> runCatchingCall(block: suspend () -> T): Result<T> =
-        try { Result.success(block()) } catch (e: Exception) { Result.failure(e) }
+        try { Result.success(block()) } catch (e: Exception) { Result.failure(friendly(e)) }
+
+    /**
+     * Turns SDK exceptions into messages a member can act on. Callable errors already carry the
+     * server's user-facing message; everything else is mapped so no internals leak into the UI.
+     */
+    private fun friendly(e: Exception): Exception = when (e) {
+        is FirebaseFunctionsException -> if (e.code == FirebaseFunctionsException.Code.INTERNAL || e.code == FirebaseFunctionsException.Code.UNKNOWN) {
+            IllegalStateException("Something went wrong on our side. Please try again.")
+        } else e
+        is FirebaseNetworkException -> IllegalStateException("You're offline. Check your connection and try again.")
+        is FirebaseTooManyRequestsException -> IllegalStateException("Too many attempts. Please wait a little and try again.")
+        is FirebaseAuthInvalidCredentialsException -> IllegalArgumentException("That code didn't match. Check the SMS and try again.")
+        is IllegalArgumentException, is IllegalStateException -> e
+        else -> IllegalStateException("Something went wrong. Please try again.")
+    }
 
     // ------------------------------------------------------------------------------------- Auth
 
     private val _session = MutableStateFlow(auth.currentUser?.let { Session(it.uid, mask(it.phoneNumber)) })
     override val session: StateFlow<Session?> = _session.asStateFlow()
-    private var verificationId: String? = null
+    @Volatile private var verificationId: String? = null
+    @Volatile private var resendToken: PhoneAuthProvider.ForceResendingToken? = null
 
-    private fun mask(phone: String?): String = phone?.let { "+91 ••••• ••" + it.takeLast(3) } ?: ""
+    private fun mask(phone: String?): String = PhoneNumbers.mask(phone)
 
-    override suspend fun sendOtp(phoneE164: String): Result<Unit> {
+    override suspend fun sendOtp(phoneE164: String, resend: Boolean): Result<Unit> {
         val activity = ActivityHolder.get() ?: return Result.failure(IllegalStateException("Please try again"))
+        if (!PhoneNumbers.e164.matches(phoneE164)) return Result.failure(IllegalArgumentException("Enter a valid mobile number"))
         return suspendCancellableCoroutine { cont ->
-            val options = PhoneAuthOptions.newBuilder(auth)
+            val builder = PhoneAuthOptions.newBuilder(auth)
+            val token = resendToken
+            if (resend && token != null) builder.setForceResendingToken(token)
+            val options = builder
                 .setPhoneNumber(phoneE164)
                 .setTimeout(60L, TimeUnit.SECONDS)
                 .setActivity(activity)
@@ -139,11 +171,12 @@ class FirebaseBackend(
                     }
 
                     override fun onVerificationFailed(e: FirebaseException) {
-                        if (cont.isActive) cont.resume(Result.failure(e))
+                        if (cont.isActive) cont.resume(Result.failure(friendly(e)))
                     }
 
                     override fun onCodeSent(id: String, token: PhoneAuthProvider.ForceResendingToken) {
                         verificationId = id
+                        resendToken = token
                         if (cont.isActive) cont.resume(Result.success(Unit))
                     }
                 })
@@ -158,8 +191,14 @@ class FirebaseBackend(
         Session(user.uid, mask(user.phoneNumber))
     }
 
+    /** Shared-phone privacy: sign out and wipe caches, own photos and local settings. */
     override suspend fun signOut() {
         auth.signOut()
+        verificationId = null
+        resendToken = null
+        synchronized(profileCache) { profileCache.clear() }
+        photoStore.clear()
+        settingsRepository.reset()
     }
 
     // ------------------------------------------------------------------------- live listeners
@@ -251,9 +290,39 @@ class FirebaseBackend(
 
     override suspend fun getProfile(id: String): Profile? {
         if (id == uid) return _myProfile.value
-        profileCache[id]?.let { return it }
+        synchronized(profileCache) { profileCache[id] }?.let { return it }
         return runCatching { decode<Profile>(call("getProfileCard", mapOf("id" to id))["profile"]) }
-            .getOrNull()?.also { profileCache[id] = it }
+            .getOrNull()?.also { synchronized(profileCache) { profileCache[id] = it } }
+    }
+
+    private val storage by lazy { FirebaseStorage.getInstance() }
+
+    /** Uploads to the member's own Storage folder (rules: owner-only, JPEG, < 8 MB), then publishes. */
+    override suspend fun addPhoto(jpeg: ByteArray): Result<Photo> = runCatchingCall {
+        val me = uid ?: error("Please sign in again")
+        val profile = _myProfile.value ?: error("Create your profile first")
+        require(profile.photos.size < MAX_PHOTOS) { "You can add up to $MAX_PHOTOS photos" }
+        val photo = Photo(id = "ph_" + UUID.randomUUID().toString().replace("-", "").take(16), seed = (0..Int.MAX_VALUE).random())
+        val metadata = StorageMetadata.Builder().setContentType("image/jpeg").build()
+        storage.reference.child("photos/$me/${photo.id}.jpg").putBytes(jpeg, metadata).await()
+        photoStore.write(photo.id, jpeg)
+        saveMyProfile(profile.copy(photos = profile.photos + photo)).getOrThrow()
+        photo
+    }
+
+    override suspend fun removePhoto(id: String): Result<Unit> = runCatchingCall {
+        val me = uid ?: error("Please sign in again")
+        val profile = _myProfile.value ?: error("Create your profile first")
+        saveMyProfile(profile.copy(photos = profile.photos.filterNot { it.id == id })).getOrThrow()
+        runCatching { storage.reference.child("photos/$me/$id.jpg").delete().await() }
+        photoStore.delete(id)
+    }
+
+    override suspend fun setPrimaryPhoto(id: String): Result<Unit> = runCatchingCall {
+        val profile = _myProfile.value ?: error("Create your profile first")
+        val target = profile.photos.firstOrNull { it.id == id } ?: error("Photo not found")
+        saveMyProfile(profile.copy(photos = listOf(target) + profile.photos.filterNot { it.id == id })).getOrThrow()
+        Unit
     }
 
     // ---------------------------------------------------------------------------------- Matches
@@ -268,7 +337,8 @@ class FirebaseBackend(
     private fun rank(profiles: List<Profile>): List<RankedMatch> {
         val me = _myProfile.value ?: return emptyList()
         val e = engine()
-        return profiles.onEach { profileCache[it.id] = it }.mapIndexed { i, p ->
+        synchronized(profileCache) { profiles.forEach { profileCache[it.id] = it } }
+        return profiles.mapIndexed { i, p ->
             RankedMatch(p, e.score(me, p), (profiles.size - i).toDouble())
         }
     }
@@ -295,13 +365,14 @@ class FirebaseBackend(
         }
     }
 
-    override suspend fun toggleShortlist(otherId: String) {
-        val me = uid ?: return
+    override suspend fun toggleShortlist(otherId: String): Result<Unit> = runCatchingCall {
+        val me = uid ?: error("Please sign in again")
         val ref = db.collection("users").document(me).collection("shortlist").document(otherId)
         if (otherId in _shortlist.value) ref.delete().await() else {
             ref.set(mapOf("at" to System.currentTimeMillis())).await()
             recordFeedback(otherId, PreferenceLearner.Feedback.SHORTLISTED)
         }
+        Unit
     }
 
     override suspend fun pass(otherId: String) {
@@ -355,7 +426,7 @@ class FirebaseBackend(
             .await()
     }
 
-    override suspend fun setContactShared(matchId: String, shared: Boolean) {
+    override suspend fun setContactShared(matchId: String, shared: Boolean): Result<Unit> = runCatchingCall<Unit> {
         call("setContactSharing", mapOf("matchId" to matchId, "shared" to shared))
     }
 
@@ -369,7 +440,7 @@ class FirebaseBackend(
     override suspend fun sharedContact(matchId: String): String? =
         runCatching { call("getSharedContact", mapOf("matchId" to matchId))["phone"] as? String }.getOrNull()
 
-    override suspend fun closeConversation(matchId: String) {
+    override suspend fun closeConversation(matchId: String): Result<Unit> = runCatchingCall<Unit> {
         call("closeMatch", mapOf("matchId" to matchId))
     }
 
@@ -427,12 +498,15 @@ class FirebaseBackend(
 
     // ----------------------------------------------------------------------------------- Safety
 
-    override suspend fun report(userId: String, reason: ReportReason, details: String, attachRecentMessages: Boolean) {
+    override suspend fun report(userId: String, reason: ReportReason, details: String, attachRecentMessages: Boolean): Result<Unit> = runCatchingCall<Unit> {
         call("reportUser", mapOf("userId" to userId, "reason" to reason.name, "details" to details, "attachRecentMessages" to attachRecentMessages))
     }
 
-    override suspend fun block(userId: String) { call("blockUser", mapOf("userId" to userId)) }
-    override suspend fun unblock(userId: String) { call("unblockUser", mapOf("userId" to userId)) }
+    override suspend fun block(userId: String): Result<Unit> = runCatchingCall<Unit> {
+        call("blockUser", mapOf("userId" to userId))
+        synchronized(profileCache) { profileCache.remove(userId) }
+    }
+    override suspend fun unblock(userId: String): Result<Unit> = runCatchingCall<Unit> { call("unblockUser", mapOf("userId" to userId)) }
 
     // ---------------------------------------------------------------------------------- Privacy
 
@@ -442,26 +516,31 @@ class FirebaseBackend(
         runCatching { call("updateConsent", mapOf("purpose" to purpose.name, "granted" to granted)) }
     }
 
-    override suspend fun exportMyData(): String = call("exportMyData")["json"] as? String ?: "{}"
-    override suspend fun requestDeletion() {
+    override suspend fun exportMyData(): Result<String> = runCatchingCall { call("exportMyData")["json"] as? String ?: "{}" }
+    override suspend fun requestDeletion(): Result<Unit> = runCatchingCall {
         call("requestAccountDeletion")
         settingsRepository.update { it.copy(deletionRequestedAt = System.currentTimeMillis()) }
     }
-    override suspend fun cancelDeletion() {
+    override suspend fun cancelDeletion(): Result<Unit> = runCatchingCall {
         call("cancelAccountDeletion")
         settingsRepository.update { it.copy(deletionRequestedAt = null) }
     }
 
     // ----------------------------------------------------------------------------------- Family
 
-    override suspend fun invite(name: String, relation: String, permissions: Set<FamilyPermission>): FamilyManager =
-        decode(call("inviteFamilyManager", mapOf("name" to name, "relation" to relation, "permissions" to JSONArray(permissions.map { it.name })))["manager"])
+    override suspend fun invite(name: String, relation: String, permissions: Set<FamilyPermission>): Result<FamilyManager> = runCatchingCall {
+        decode<FamilyManager>(call("inviteFamilyManager", mapOf("name" to name, "relation" to relation, "permissions" to JSONArray(permissions.map { it.name })))["manager"])
+    }
 
-    override suspend fun updatePermissions(managerId: String, permissions: Set<FamilyPermission>) {
+    override suspend fun updatePermissions(managerId: String, permissions: Set<FamilyPermission>): Result<Unit> = runCatchingCall<Unit> {
         call("updateFamilyManager", mapOf("managerId" to managerId, "permissions" to JSONArray(permissions.map { it.name })))
     }
 
-    override suspend fun remove(managerId: String) { call("removeFamilyManager", mapOf("managerId" to managerId)) }
+    override suspend fun remove(managerId: String): Result<Unit> = runCatchingCall<Unit> { call("removeFamilyManager", mapOf("managerId" to managerId)) }
+
+    private companion object {
+        const val MAX_PHOTOS = 6
+    }
 
     // ----------------------------------------------------------------------------- Verification
 

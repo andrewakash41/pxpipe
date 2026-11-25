@@ -29,18 +29,23 @@ model and the controls built into the app and the backend.
 | Control | Threats | Where |
 |---|---|---|
 | `FLAG_SECURE` on all windows: blocks screenshots, screen recording, and previews in Recents | T4, T7 | `core/security/DeviceSecurity.kt` (`SecureWindow`) |
-| Viewer watermark overlay on every full-size photo (viewer member code + date) | T4 | `ui/components/Components.kt` (`ProfilePhoto`) |
+| Viewer watermark overlay on every full-size photo (viewer member code + date), faint and tiled | T4 | `ui/components/ProfileVisuals.kt` (`ProfilePhoto`) |
+| "After I accept" photos are blurred with RenderEffect on Android 12+; on older versions the photo is **not drawn at all** (a dimmed overlay would still show the face) | T4 | `ProfilePhoto` |
 | Tapjacking protection: touches are filtered when the window is obscured | T6 | `SecureWindow` |
-| App lock: BiometricPrompt (strong biometric or device credential), auto-lock after a configurable time in background | T7 | `core/security/AppLockManager.kt` |
+| App lock: BiometricPrompt (strong biometric or device credential), auto-lock after a configurable time in background. While locked the app is invisible and removed from the accessibility tree, the lock screen consumes all touches, Back leaves the app instead of navigating underneath, and focused fields lose focus and the keyboard | T7 | `core/security/AppLockManager.kt`, `ui/root/Root.kt` |
+| Sign-out wipes this member from the device: settings and consents (so the next person sees the consent screen), learned preferences, trusted contact, own photos, caches | T7 | `signOut()` in both backends |
 | Private notifications: no names or message text on the lock screen | T7 | Setting in place; applied when push notifications ship (🗺) |
 | Encrypted local storage: Tink AEAD (AES-256-GCM) with keyset wrapped by an Android Keystore master key | T7, T8 | `core/security/SecureStore.kt` |
 | No cloud/device backups of app data (`allowBackup=false`, data-extraction rules exclude everything) | T7, T8 | Manifest, `xml/data_extraction_rules.xml` |
-| Firestore cache in memory only (no on-disk persistence of others' profiles or chats) | T7 | `data/firebase/FirebaseBackend.kt` |
+| Firestore cache in memory only (no on-disk persistence of others' profiles or chats); image loader has **no disk cache**, so other members' photos never touch storage | T7 | `data/firebase/FirebaseBackend.kt`, `VachanApp` |
+| Own photos stored encrypted (Tink AEAD bound to the photo id) in app-private storage | T7 | `core/photos/Photos.kt` (`EncryptedPhotoStore`) |
+| Phone numbers and invite codes are copied with Android 13's sensitive-clipboard flag (no clipboard preview) | T7 | `ui/common/Common.kt` |
+| Data export is written straight to a file the member chooses (Storage Access Framework), not passed through a share sheet | T7 | `ui/settings/PrivacyCenter.kt` |
 | Network: cleartext disabled; only system CAs trusted in release | T8 | `xml/network_security_config.xml` |
 | Firebase App Check with Play Integrity: only the genuine app can call the backend | T1, T8 | `VachanApp` |
 | Root / emulator / debugger signals are reported as *risk signals* (they don't lock users out) | T2, T6 | `DeviceIntegrity` → `reportClientSignals` |
 | R8 minification and obfuscation on release; no secrets in the APK | T8 | `app/build.gradle.kts` |
-| EXIF/GPS metadata stripped by re-encoding before photo upload | T5 | 🗺 photo upload pipeline |
+| EXIF/GPS metadata stripped by re-encoding before a photo is stored or uploaded; decode is sample-size bounded so a huge image can't exhaust memory | T5 | `core/photos/Photos.kt` (`PhotoProcessor`) |
 | On-device Safety Copilot scans incoming chat for scam scripts, nothing leaves the phone | T2 | `core/safety/ScamDetector.kt` |
 | Outgoing PII nudge (phone, UPI, address, OTP) | T2, T5 | `core/safety/PiiDetector.kt` |
 
@@ -50,7 +55,8 @@ model and the controls built into the app and the backend.
 |---|---|---|
 | **Default-deny security rules**; every collection is explicitly allowed | T1, T8 | `firebase/firestore.rules` |
 | **No `list` on profiles**: discovery only through Cloud Functions with per-user rate limits and preference/consent/block filtering. Firebase UIDs are random 28-character IDs, so nothing is sequential | T1 | rules + `firebase/functions/src/callables/discovery.ts` |
-| Clients can never write trust fields (verification badges, risk scores, plan): public profiles are written only by the server after validation and moderation | T3, T8 | `publishProfile` callable |
+| Clients can never write trust fields (verification badges, risk scores, plan): public profiles are written only by the server after validation and moderation. Client photo entries are reduced to `{id, seed}` (a client `url` could point viewers at an external tracker), and only photos that really exist in the member's Storage folder are kept | T3, T4, T8 | `publishProfile` callable, `lib/model.ts` |
+| Cancelling a pending deletion restores the member's own visibility (it used to reset to "Everyone") | T1 | `callables/account.ts` |
 | Interests, matches and contact sharing are server-mediated, with quotas | T1, T2 | `callables/interests.ts` |
 | Messages: only match members can read and write, the sender must be the caller, size limits apply, closed/blocked matches are read-only | T2, T8 | rules |
 | Storage: originals are owner-only; other members get 15-minute signed URLs after a permission check (photo privacy level, block status, match) | T4 | `firebase/storage.rules`, `callables/discovery.ts` |
@@ -98,8 +104,8 @@ E2EE would stop us (and attackers who breach us) from reading chats. It also pre
 
 | Obligation | Implementation |
 |---|---|
-| Notice in clear, plain language, itemised by purpose | Consent screen at onboarding; Privacy Center → "What we collect and why" |
-| Free, specific, informed, unambiguous consent; as easy to withdraw as to give | Per-purpose toggles (Essential / AI assistance / Product analytics / Marketing); history in `consentLog` |
+| Notice in clear, plain language, itemised by purpose | Consent screen at onboarding; in-app privacy notice (onboarding and Privacy Center) |
+| Free, specific, informed, unambiguous consent; as easy to withdraw as to give | Per-purpose toggles (Essential / AI assistance / Product analytics / Marketing), **all optional purposes off by default** (no pre-ticked boxes); history in `consentLog` |
 | Purpose limitation and data minimisation | Optional sensitive fields; AI gets de-identified features only |
 | Accuracy | User edits profile anytime; "information is correct" declaration |
 | Storage limitation | Retention schedule: inactive accounts reminded at 12 months and deleted at 18; chats of closed matches deleted 90 days after closing (configurable) |

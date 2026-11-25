@@ -1,6 +1,7 @@
-# Vachan — product specification
+# Aangan — product specification
 
-*Vachan* (वचन, "a promise") is a working title for a privacy-first, AI-assisted matrimony
+*Aangan* (आँगन, "courtyard" — the private heart of an Indian home, open to the sky and closed to
+the street) is the product name, replacing the earlier working title *Vachan*. It is a privacy-first, AI-assisted matrimony
 app for Indian users at home and abroad. The name is a placeholder and easy to change.
 
 Every feature below is traced to a gap found in [RESEARCH.md](RESEARCH.md). Status legend:
@@ -53,7 +54,7 @@ marriers (29+).
 
 | Feature | Why (gap) | Status |
 |---|---|---|
-| Phone OTP sign-up (Firebase Auth) | Baseline identity, required by advisory | ✅ |
+| Phone OTP sign-up (Firebase Auth) with resend, and international numbers for NRIs and Gulf workers (UAE, US, UK, Canada, Australia, Singapore, Saudi Arabia, Qatar, Kuwait, Oman, NZ, Germany) | Baseline identity, required by advisory; NRI segment | ✅ |
 | Intent-to-marry + correct-information declaration, minimum-age gate (21 M / 18 F) | MeitY advisory; Prohibition of Child Marriage Act | ✅ |
 | **Free** selfie liveness with randomised gesture challenge | Fake profiles; "verification only after payment" complaint | ✅ UI flow + 🔌 vendor liveness/face-match (with injection-attack detection) |
 | Government ID via DigiLocker / Aadhaar offline (QR / verifiable credential). Only the *result* is stored (name match, age band, gender), never the Aadhaar number | Fake profiles; legal requirement to verify ID | 🔌 needs UIDAI/DigiLocker partner registration + legal review |
@@ -82,7 +83,7 @@ own; the LLM explains, drafts and parses — it never decides who is shown.** Se
 | **Icebreakers** | 3 conversation starters from shared interests/values (no private data) | ✅ |
 | **Kind decline drafts** | One tap sends a respectful "not a match" message | ✅ |
 | **Chat translation** | Hindi ↔ Tamil ↔ English etc. for cross-regional matches and families | ✅ (AI provider) |
-| **Ask Vachan (assistant)** | Helps refine preferences ("you keep passing on profiles outside Bengaluru — tighten distance?"), explains features, gives safety guidance. Guardrails: can't reveal other users' private data and can't contact anyone | ✅ |
+| **Aangan Guide (assistant)** | Helps refine preferences ("you keep passing on profiles outside Bengaluru — tighten distance?"), explains features, gives safety guidance. Guardrails: can't reveal other users' private data and can't contact anyone | ✅ |
 | **Family brief** | A watermarked, contact-free one-page summary of a match to share with parents | 🗺 |
 | Horoscope matching (opt-in, off by default) | Some families want it; many users don't | 🗺 partner integration |
 
@@ -94,7 +95,7 @@ own; the LLM explains, drafts and parses — it never decides who is shown.** Se
 | Outgoing-message nudge | Warns before you share a phone number, UPI ID, address or OTP in chat | ✅ |
 | One-tap report & block, with categories; blocking hides both people from each other everywhere | Advisory: encourage fraud reporting | ✅ |
 | Server-side pattern detection (no LLM): same text sent to many users, burst messaging, new account + money keywords → account risk score → step-up verification or human review | Organised fraud rings | ✅ |
-| **Meet safely** | Plan a first meeting in a public place, share time/place with a trusted contact, check-in timer, SOS shortcut (112) | ✅ |
+| **Meet safely** | Plan a first meeting in a public place, share time/place with a trusted contact, check-in timer that survives leaving the screen or closing the app (persisted deadline + a notification with no names), SOS shortcut (112) | ✅ |
 | Women-first controls | Verified-only contact, photo blur until accepted, no contact from people without photos (enforced server-side) | ✅ |
 | Grievance officer + 24 h acknowledge / 15-day resolution SLA tracking | IT Rules 2021 | ✅ (info + report status) |
 
@@ -106,13 +107,13 @@ own; the LLM explains, drafts and parses — it never decides who is shown.** Se
 | Exact DOB, full name, exact location and phone are never shown: profiles show age, first name + initial, city | ✅ |
 | **Photo privacy levels:** visible to all members / verified members / only after I accept interest. Blurred previews otherwise | ✅ |
 | **Viewer watermark:** every full photo is rendered with the viewer's member code, a deterrent against leaks and misuse | ✅ (client overlay; server-side burn-in 🗺) |
-| Photo upload pipeline: client upload, EXIF/GPS stripping, AI-image forensics, derivatives | 🔌 storage rules + signed-URL serving ✅; client upload and processing 🗺 |
+| Photo upload pipeline: system photo picker (no storage permission), bounded decode, EXIF/GPS stripping by re-encoding, up to 6 photos with a main photo; own photos kept encrypted on device; server keeps only photos that really exist in Storage | ✅ client + rules + signed-URL serving; 🔌 AI-image forensics and derivatives |
 | **Screenshot and screen-recording blocking** (`FLAG_SECURE`) across the app | ✅ |
 | Phone number is never exposed: share it only through a consent button, and revoke it at any time | ✅ |
 | App lock (biometric / device credential) with auto-lock timeout, built for shared family phones | ✅ |
 | Private notifications (no names or message text on the lock screen) | ✅ setting; 🗺 push notifications (FCM) |
 | Encrypted on-device storage (Tink AEAD with Android Keystore key); no backups of app data; chat cache in memory only | ✅ |
-| Incognito: browse without appearing in "who viewed me"; hide profile any time | ✅ |
+| Incognito: browse without appearing in "who viewed me"; pause the profile any time (remembers and restores your visibility choice) | ✅ |
 | **Consent dashboard (DPDP):** per-purpose toggles with history; AI processing can be turned off entirely | ✅ |
 | Download my data (JSON export) and delete my account (30-day grace, then hard delete; legally required IP log kept 1 year, separately and access-restricted) | ✅ |
 | Profiles can't be scraped: no list queries on profiles, server-mediated discovery with rate limits, random non-sequential IDs (lesson from the "Dil Ka Rishta" API leak) | ✅ |
@@ -143,7 +144,7 @@ screens.**
 
 ## 4. Monetisation (designed against the complaints)
 
-| Free (forever) | Vachan Plus (convenience) |
+| Free (forever) | Aangan Plus (convenience) |
 |---|---|
 | Full profile, all verification, 8 Daily Picks/day, send 5 interests/day, **unlimited chat after mutual interest**, safety features, AI insights within a fair-use limit | 20 Daily Picks, more interests/day, advanced filters, more AI search and translation, incognito, see who viewed you, profile boost (labelled "promoted" to others) |
 

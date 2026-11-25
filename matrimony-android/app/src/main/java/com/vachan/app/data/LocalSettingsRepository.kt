@@ -24,4 +24,8 @@ class LocalSettingsRepository(secureStore: SecureStore, scope: CoroutineScope) :
     override suspend fun update(transform: (AppSettings) -> AppSettings) {
         store.updateData(transform)
     }
+
+    override suspend fun reset() {
+        store.updateData { AppSettings() }
+    }
 }

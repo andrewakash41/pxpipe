@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Vachan</string>
+    <string name="app_name">Aangan</string>
+    <string name="checkin_channel_name">Safety check-ins</string>
+    <string name="checkin_channel_description">Reminders to check in during a first meeting</string>
 </resources>

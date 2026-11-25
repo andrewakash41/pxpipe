@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="kumkum">#FF9A1B3C</color>
-    <color name="marigold">#FFE0951F</color>
-    <color name="cream">#FFFFF8F4</color>
+    <color name="ivory">#FFF8F4EE</color>
+    <color name="ink">#FF1C1917</color>
+    <color name="clay">#FFB0532F</color>
+    <color name="night">#FF12100E</color>
 </resources>

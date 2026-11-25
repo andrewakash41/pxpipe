@@ -3,12 +3,13 @@ package com.vachan.app.ui
 import android.content.Context
 import android.graphics.Bitmap
 import android.os.Looper
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.background
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.captureToImage
@@ -28,6 +29,8 @@ import com.vachan.app.core.model.Profile
 import com.vachan.app.core.model.ValueAnswer
 import com.vachan.app.core.model.ValueQuestion
 import com.vachan.app.core.model.Verification
+import com.vachan.app.core.photos.EncryptedPhotoStore
+import com.vachan.app.core.photos.LocalPhotoStore
 import com.vachan.app.core.security.SecureStore
 import com.vachan.app.data.LocalSettingsRepository
 import com.vachan.app.data.demo.DemoBackend
@@ -40,6 +43,8 @@ import com.vachan.app.ui.discover.ProfileDetailScreen
 import com.vachan.app.ui.discover.ProfileDetailViewModel
 import com.vachan.app.ui.interests.InterestsScreen
 import com.vachan.app.ui.interests.InterestsViewModel
+import com.vachan.app.ui.me.MeScreen
+import com.vachan.app.ui.me.MeViewModel
 import com.vachan.app.ui.onboarding.AuthFlow
 import com.vachan.app.ui.onboarding.AuthViewModel
 import com.vachan.app.ui.onboarding.ConsentScreen
@@ -47,13 +52,17 @@ import com.vachan.app.ui.onboarding.ConsentViewModel
 import com.vachan.app.ui.profile.ProfileEditorScreen
 import com.vachan.app.ui.profile.ProfileEditorViewModel
 import com.vachan.app.ui.root.Nav
+import com.vachan.app.ui.safety.CheckInAlarms
+import com.vachan.app.ui.safety.MeetSafelyScreen
 import com.vachan.app.ui.safety.SafetyCenterScreen
 import com.vachan.app.ui.safety.SafetyViewModel
 import com.vachan.app.ui.search.SearchScreen
 import com.vachan.app.ui.search.SearchViewModel
 import com.vachan.app.ui.settings.PrivacyCenterScreen
 import com.vachan.app.ui.settings.PrivacyViewModel
-import com.vachan.app.ui.theme.VachanTheme
+import com.vachan.app.ui.theme.AanganTheme
+import com.vachan.app.ui.verification.VerificationScreen
+import com.vachan.app.ui.verification.VerificationViewModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -90,9 +99,15 @@ class ScreenshotTest {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private lateinit var settings: LocalSettingsRepository
     private lateinit var backend: DemoBackend
+    private lateinit var photos: EncryptedPhotoStore
 
-    private val nav = Nav({}, {}, {}, {}, {}, {}, {}, {}, {}, {})
+    private val nav = Nav()
     private var scamMatchId = ""
+
+    private object NoAlarms : CheckInAlarms {
+        override fun schedule(context: Context, atMillis: Long) = Unit
+        override fun cancel(context: Context) = Unit
+    }
 
     private val me = Profile(
         id = "me", firstName = "Meera", lastInitial = "S", gender = Gender.FEMALE, age = 29, heightCm = 163,
@@ -115,7 +130,8 @@ class ScreenshotTest {
             .build().getPrimitive(RegistryConfiguration.get(), Aead::class.java)
         val store = SecureStore(context) { aead }
         settings = LocalSettingsRepository(store, scope)
-        backend = DemoBackend(store, scope, settings)
+        photos = EncryptedPhotoStore(context) { aead }
+        backend = DemoBackend(store, scope, settings, photos)
         runBlocking {
             backend.sendOtp("+919876543210")
             backend.verifyOtp(DemoBackend.DEMO_OTP)
@@ -129,10 +145,12 @@ class ScreenshotTest {
     @After
     fun tearDown() = scope.cancel()
 
-    private fun shoot(name: String, settleMs: Long = 600, content: @Composable () -> Unit) {
+    private fun shoot(name: String, settleMs: Long = 600, dark: Boolean = false, inset: Boolean = true, content: @Composable () -> Unit) {
         compose.setContent {
-            VachanTheme(darkTheme = false) {
-                Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).statusBarsPadding()) { content() }
+            AanganTheme(darkTheme = dark) {
+                CompositionLocalProvider(LocalPhotoStore provides photos) {
+                    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).then(if (inset) Modifier.statusBarsPadding() else Modifier)) { content() }
+                }
             }
         }
         // Let view-model coroutines (simulated network delays) run on the paused main looper.
@@ -148,32 +166,39 @@ class ScreenshotTest {
         }
     }
 
-    @Test fun welcome() = shoot("01_welcome") { AuthFlow(demoMode = true, vm = AuthViewModel(backend)) }
+    @Test fun welcome() = shoot("01_welcome", inset = false) { AuthFlow(demoMode = true, vm = AuthViewModel(backend)) }
 
-    @Test fun consent() = shoot("02_consent") { ConsentScreen(vm = ConsentViewModel(settings, backend)) }
+    @Test fun signIn() {
+        val vm = AuthViewModel(backend).apply { goTo(1); onPhone("9876543210") }
+        shoot("02_sign_in", inset = false) { AuthFlow(demoMode = true, vm = vm) }
+    }
+
+    @Test fun consent() = shoot("03_consent", inset = false) { ConsentScreen(vm = ConsentViewModel(settings, backend)) }
 
     @Test fun valuesCompass() {
         val vm = ProfileEditorViewModel(backend, backend, settings)
         vm.goTo(4)
-        shoot("03_values_compass") { ProfileEditorScreen(isOnboarding = false, onDone = {}, vm = vm) }
+        shoot("04_values_compass", inset = false) { ProfileEditorScreen(isOnboarding = false, onDone = {}, vm = vm) }
     }
 
-    @Test fun dailyPicks() = shoot("04_daily_picks") { DiscoverScreen(nav, vm = DiscoverViewModel(backend, backend)) }
+    @Test fun dailyPicks() = shoot("05_today") { DiscoverScreen(nav, vm = DiscoverViewModel(backend, backend)) }
+
+    @Test fun dailyPicksDark() = shoot("05b_today_dark", dark = true) { DiscoverScreen(nav, vm = DiscoverViewModel(backend, backend)) }
 
     @Test fun profileDetail() {
         val target = runBlocking { backend.dailyPicks().first().profile.id }
-        val vm = ProfileDetailViewModel(backend, backend, backend, backend, backend)
-        shoot("05_profile_compatibility", settleMs = 900) { ProfileDetailScreen(target, nav, vm) }
+        val vm = ProfileDetailViewModel(backend, backend, backend, backend, backend, backend)
+        shoot("06_profile", settleMs = 900, inset = false) { ProfileDetailScreen(target, nav, vm) }
     }
 
     @Test fun naturalLanguageSearch() {
         val vm = SearchViewModel(backend, backend, backend)
         vm.onQuery("Vegetarian doctor or scientist, 28 to 34, verified")
         vm.search()
-        shoot("06_search") { SearchScreen(nav, vm = vm) }
+        shoot("07_search") { SearchScreen(nav, vm = vm) }
     }
 
-    @Test fun interests() = shoot("07_interests") { InterestsScreen(nav, vm = InterestsViewModel(backend, backend, backend, backend)) }
+    @Test fun interests() = shoot("08_interests") { InterestsScreen(nav, vm = InterestsViewModel(backend, backend, backend, backend)) }
 
     @Test fun scamWarningInChat() {
         runBlocking {
@@ -187,10 +212,25 @@ class ScreenshotTest {
             Thread.sleep(4_200)
         }
         val vm = ChatViewModel(backend, backend, backend, backend, backend, settings)
-        shoot("08_chat_safety_copilot") { ChatScreen(scamMatchId, nav, vm) }
+        shoot("09_chat_safety_copilot", inset = false) { ChatScreen(scamMatchId, nav, vm) }
     }
 
-    @Test fun privacyCenter() = shoot("09_privacy_center") { PrivacyCenterScreen(nav, vm = PrivacyViewModel(settings, backend, backend)) }
+    @Test fun you() = shoot("10_you") { MeScreen(nav, vm = MeViewModel(backend, backend)) }
 
-    @Test fun safetyCenter() = shoot("10_safety_center") { SafetyCenterScreen(nav, vm = SafetyViewModel(backend, settings)) }
+    @Test fun privacyCenter() = shoot("11_privacy_center", inset = false) { PrivacyCenterScreen(nav, vm = PrivacyViewModel(settings, backend, backend)) }
+
+    @Test fun safetyCenter() = shoot("12_safety_center", inset = false) { SafetyCenterScreen(nav, vm = SafetyViewModel(backend, settings).apply { alarms = NoAlarms }) }
+
+    @Test fun meetSafelyWithCheckIn() {
+        runBlocking { settings.update { it.copy(trustedContactName = "Asha", trustedContactPhone = "+919812345678", checkInAt = System.currentTimeMillis() + 83 * 60_000L) } }
+        shoot("13_meet_safely", inset = false) { MeetSafelyScreen("Rohan", nav, vm = SafetyViewModel(backend, settings).apply { alarms = NoAlarms }) }
+    }
+
+    @Test fun verification() = shoot("14_verification", inset = false) { VerificationScreen(nav, vm = VerificationViewModel(backend, backend)) }
+
+    @Test fun photosAndBio() {
+        val vm = ProfileEditorViewModel(backend, backend, settings)
+        vm.goTo(6)
+        shoot("15_photos_and_bio", inset = false) { ProfileEditorScreen(isOnboarding = false, onDone = {}, vm = vm) }
+    }
 }

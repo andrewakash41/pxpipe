@@ -12,6 +12,7 @@ import com.vachan.app.core.model.FamilyPermission
 import com.vachan.app.core.model.Interest
 import com.vachan.app.core.model.MatchInsight
 import com.vachan.app.core.model.Message
+import com.vachan.app.core.model.Photo
 import com.vachan.app.core.model.Profile
 import com.vachan.app.core.model.Report
 import com.vachan.app.core.model.ReportReason
@@ -25,6 +26,9 @@ import kotlinx.serialization.Serializable
  *  - `demo/DemoBackend`: on-device fake backend with seeded profiles (no network), used when the
  *    app is built without a Firebase config;
  *  - `firebase/FirebaseBackend`: the real backend (Auth, Firestore, Cloud Functions in asia-south1).
+ *
+ * Anything that can fail over the network returns [Result] so a dropped connection becomes a
+ * message on screen, never an uncaught exception in a ViewModel coroutine (which crashes the app).
  */
 
 @Serializable
@@ -32,9 +36,13 @@ data class Session(val userId: String, val phoneMasked: String)
 
 interface AuthRepository {
     val session: StateFlow<Session?>
-    /** Starts phone verification. In Demo mode any Indian mobile number works and the OTP is 123456. */
-    suspend fun sendOtp(phoneE164: String): Result<Unit>
+    /**
+     * Starts phone verification for an E.164 number. [resend] re-sends to the same number.
+     * In Demo mode any valid mobile number works and the code is 123456.
+     */
+    suspend fun sendOtp(phoneE164: String, resend: Boolean = false): Result<Unit>
     suspend fun verifyOtp(code: String): Result<Session>
+    /** Signs out and wipes everything this member left on the device (shared-phone privacy). */
     suspend fun signOut()
 }
 
@@ -43,6 +51,10 @@ interface ProfileRepository {
     /** Server validates, moderates and publishes the public card; trust fields can't be set by clients. */
     suspend fun saveMyProfile(profile: Profile): Result<Profile>
     suspend fun getProfile(id: String): Profile?
+    /** Adds an already metadata-stripped JPEG (see PhotoProcessor) to the member's own profile. */
+    suspend fun addPhoto(jpeg: ByteArray): Result<Photo>
+    suspend fun removePhoto(id: String): Result<Unit>
+    suspend fun setPrimaryPhoto(id: String): Result<Unit>
 }
 
 interface MatchRepository {
@@ -52,7 +64,7 @@ interface MatchRepository {
     suspend fun search(filters: SearchFilters): List<RankedMatch>
     suspend fun compatibilityWith(otherId: String): CompatibilityResult?
     suspend fun recordFeedback(otherId: String, feedback: PreferenceLearner.Feedback)
-    suspend fun toggleShortlist(otherId: String)
+    suspend fun toggleShortlist(otherId: String): Result<Unit>
     suspend fun pass(otherId: String)
     suspend fun resetLearning()
 }
@@ -69,11 +81,11 @@ interface ChatRepository {
     val conversations: StateFlow<List<Conversation>>
     fun messages(matchId: String): Flow<List<Message>>
     suspend fun sendMessage(matchId: String, text: String): Result<Unit>
-    suspend fun setContactShared(matchId: String, shared: Boolean)
+    suspend fun setContactShared(matchId: String, shared: Boolean): Result<Unit>
     suspend fun markRead(matchId: String)
     /** The other person's number, only when they chose to share it. */
     suspend fun sharedContact(matchId: String): String?
-    suspend fun closeConversation(matchId: String)
+    suspend fun closeConversation(matchId: String): Result<Unit>
 }
 
 data class AssistantTurn(val fromUser: Boolean, val text: String)
@@ -93,30 +105,32 @@ interface AiRepository {
 interface SafetyRepository {
     val blocked: StateFlow<Set<String>>
     val reports: StateFlow<List<Report>>
-    suspend fun report(userId: String, reason: ReportReason, details: String, attachRecentMessages: Boolean)
-    suspend fun block(userId: String)
-    suspend fun unblock(userId: String)
+    suspend fun report(userId: String, reason: ReportReason, details: String, attachRecentMessages: Boolean): Result<Unit>
+    suspend fun block(userId: String): Result<Unit>
+    suspend fun unblock(userId: String): Result<Unit>
 }
 
 interface SettingsRepository {
     val settings: StateFlow<AppSettings>
     suspend fun update(transform: (AppSettings) -> AppSettings)
+    /** Back to factory defaults (used on sign-out so nothing carries over to the next person). */
+    suspend fun reset()
 }
 
 interface PrivacyRepository {
     suspend fun setConsent(purpose: ConsentPurpose, granted: Boolean)
     /** JSON export of everything we hold about the user (DPDP right to access). */
-    suspend fun exportMyData(): String
-    suspend fun requestDeletion()
-    suspend fun cancelDeletion()
+    suspend fun exportMyData(): Result<String>
+    suspend fun requestDeletion(): Result<Unit>
+    suspend fun cancelDeletion(): Result<Unit>
 }
 
 interface FamilyRepository {
     val managers: StateFlow<List<FamilyManager>>
     val activity: StateFlow<List<FamilyActivity>>
-    suspend fun invite(name: String, relation: String, permissions: Set<FamilyPermission>): FamilyManager
-    suspend fun updatePermissions(managerId: String, permissions: Set<FamilyPermission>)
-    suspend fun remove(managerId: String)
+    suspend fun invite(name: String, relation: String, permissions: Set<FamilyPermission>): Result<FamilyManager>
+    suspend fun updatePermissions(managerId: String, permissions: Set<FamilyPermission>): Result<Unit>
+    suspend fun remove(managerId: String): Result<Unit>
 }
 
 enum class VerificationStep { SELFIE, GOVERNMENT_ID, WORK_EMAIL }

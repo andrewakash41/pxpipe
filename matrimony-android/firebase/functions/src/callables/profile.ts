@@ -1,8 +1,9 @@
 import { randomInt } from "node:crypto";
+import { getStorage } from "firebase-admin/storage";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { z } from "zod";
 import { containsContactDetails, redact } from "../ai/redact.js";
-import { callableOptions, db, FieldValue, parse, requireUid } from "../lib/firebase.js";
+import { app, callableOptions, db, FieldValue, parse, requireUid } from "../lib/firebase.js";
 import { minimumMarriageAge, type Profile, ProfileInput, publicCard } from "../lib/model.js";
 import { assessText } from "../safety/scam.js";
 
@@ -18,6 +19,24 @@ async function uniqueMemberCode(): Promise<string> {
     if (created) return code;
   }
   throw new HttpsError("internal", "Please try again.");
+}
+
+/**
+ * Keeps only photo entries whose image was really uploaded to the member's own Storage folder,
+ * so a client can't claim a photo it never uploaded (which would bypass other members'
+ * "require a profile photo" setting).
+ */
+async function uploadedPhotos(uid: string, photos: { id: string; seed: number }[]) {
+  const bucket = getStorage(app).bucket();
+  const kept = await Promise.all(photos.map(async (p) => {
+    try {
+      const [exists] = await bucket.file(`photos/${uid}/${p.id}.jpg`).exists();
+      return exists ? p : null;
+    } catch {
+      return null;
+    }
+  }));
+  return kept.filter((p): p is { id: string; seed: number } => p !== null);
 }
 
 /**
@@ -47,6 +66,7 @@ export const publishProfile = onCall(callableOptions, async (req) => {
     id: uid,
     about,
     interests: input.interests.map(redact),
+    photos: await uploadedPhotos(uid, input.photos),
     verification: existing?.verification ?? { phone: true, selfie: false, governmentId: false, workEmail: false },
     memberCode: existing?.memberCode ?? (await uniqueMemberCode()),
     responseRate: existing?.responseRate ?? null,

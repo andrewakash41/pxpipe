@@ -3,6 +3,8 @@ package com.vachan.app.di
 import android.content.Context
 import com.vachan.app.BuildConfig
 import com.vachan.app.core.security.AppLockManager
+import com.vachan.app.core.photos.EncryptedPhotoStore
+import com.vachan.app.core.photos.PhotoStore
 import com.vachan.app.core.security.SecureStore
 import com.vachan.app.data.AiRepository
 import com.vachan.app.data.AuthRepository
@@ -51,15 +53,21 @@ object AppModule {
     @Singleton
     fun appLock(settings: SettingsRepository): AppLockManager = AppLockManager { settings.settings.value }
 
+    /** The member's own photos, encrypted on device with the Keystore-backed AEAD. */
     @Provides
     @Singleton
-    fun demoBackend(store: SecureStore, scope: CoroutineScope, settings: SettingsRepository): DemoBackend =
-        DemoBackend(store, scope, settings)
+    fun photoStore(@ApplicationContext context: Context, store: SecureStore): PhotoStore =
+        EncryptedPhotoStore(context) { store.aead }
 
     @Provides
     @Singleton
-    fun firebaseBackend(@ApplicationContext context: Context, scope: CoroutineScope, settings: SettingsRepository): FirebaseBackend =
-        FirebaseBackend(context, scope, settings)
+    fun demoBackend(store: SecureStore, scope: CoroutineScope, settings: SettingsRepository, photos: PhotoStore): DemoBackend =
+        DemoBackend(store, scope, settings, photos)
+
+    @Provides
+    @Singleton
+    fun firebaseBackend(@ApplicationContext context: Context, scope: CoroutineScope, settings: SettingsRepository, photos: PhotoStore): FirebaseBackend =
+        FirebaseBackend(context, scope, settings, photos)
 
     /** Firebase when the app was built with a google-services.json; otherwise the on-device Demo backend. */
     @Provides

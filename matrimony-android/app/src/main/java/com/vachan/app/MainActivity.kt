@@ -3,13 +3,16 @@ package com.vachan.app
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.fragment.app.FragmentActivity
+import com.vachan.app.core.photos.LocalPhotoStore
+import com.vachan.app.core.photos.PhotoStore
 import com.vachan.app.core.security.AppLockManager
 import com.vachan.app.core.security.SecureWindow
 import com.vachan.app.data.firebase.ActivityHolder
 import com.vachan.app.ui.root.VachanRoot
-import com.vachan.app.ui.theme.VachanTheme
+import com.vachan.app.ui.theme.AanganTheme
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 
@@ -17,6 +20,7 @@ import javax.inject.Inject
 class MainActivity : FragmentActivity() {
 
     @Inject lateinit var appLock: AppLockManager
+    @Inject lateinit var photoStore: PhotoStore
 
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
@@ -26,12 +30,14 @@ class MainActivity : FragmentActivity() {
         enableEdgeToEdge()
         ActivityHolder.set(this)
         setContent {
-            VachanTheme {
-                VachanRoot(
-                    appLock = appLock,
-                    onUnlockRequest = { onError -> appLock.unlock(this, onError) },
-                    canUseLock = { appLock.canUseLock(this) },
-                )
+            AanganTheme {
+                CompositionLocalProvider(LocalPhotoStore provides photoStore) {
+                    VachanRoot(
+                        appLock = appLock,
+                        onUnlockRequest = { onError -> appLock.unlock(this, onError) },
+                        canUseLock = { appLock.canUseLock(this) },
+                    )
+                }
             }
         }
     }

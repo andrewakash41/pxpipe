@@ -95,11 +95,14 @@ data class AppSettings(
     val incognito: Boolean = false,
     val verifiedOnlyContact: Boolean = false,
     val requirePhotoToContact: Boolean = false,
-    val hideUntil: Long? = null,
+    /** Visibility to restore when the member un-pauses their profile; null when not paused. */
+    val visibilityBeforePause: ProfileVisibility? = null,
     val deletionRequestedAt: Long? = null,
     val dailyPicksCount: Int = 8,
     val trustedContactName: String = "",
     val trustedContactPhone: String = "",
+    /** Deadline of an active "Meet safely" check-in (epoch ms), or null. Survives app restarts. */
+    val checkInAt: Long? = null,
     /** Learned factor-weight multipliers (see PreferenceLearner). Empty = defaults. */
     val learnedWeights: Map<String, Double> = emptyMap(),
 ) {

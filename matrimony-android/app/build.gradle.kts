@@ -95,6 +95,7 @@ dependencies {
     implementation(libs.kotlinx.coroutines.play.services)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.coil.compose)
+    implementation(libs.coil.network)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

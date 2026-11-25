@@ -33,6 +33,11 @@
             </intent-filter>
         </activity>
 
+        <!-- "Meet safely" check-in reminder; only this app can trigger it. -->
+        <receiver
+            android:name=".core.safety.CheckInReceiver"
+            android:exported="false" />
+
         <!-- Firebase auto-init is disabled; VachanApp initialises it only when a config is present. -->
         <provider
             android:name="com.google.firebase.provider.FirebaseInitProvider"
